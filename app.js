@@ -7,6 +7,7 @@ const config = require('config')
 const mysql = require('mysql')
 const uuid = require('uuid')
 const bcrypt = require('bcrypt')
+const Authenticate = require ('./middleware/auth')
 
 app.use(bodyParser.urlencoded({extended:false}))
 app.use(bodyParser.json())
@@ -25,6 +26,16 @@ const conn = mysql.createConnection({
 })
 
 
+app.get('/', function(req,res,next){
+	res.render('index')
+})
+
+app.get('/securepath', Authenticate, function(req,res,next){
+	res.json({
+		message: "Bueno"
+	})
+})
+
 app.post("/token", function(req,res,next){
 	const username = req.body.username
 	const password = req.body.password
@@ -36,39 +47,45 @@ app.post("/token", function(req,res,next){
 	`
 
 	conn.query (sql, [username], function(err,results,fields){
-		console.log (results)
 		if (err){
-			console.log (err)
+			res.json(err)
 		}
-
 		const hashedPassword = results[0].password
-		
 		if (password == hashedPassword) {
 			const token = uuid ()
-			res.json({
-				token:token
-			})
+
+				const tokenUpdateSQL = `
+					UPDATE users
+					SET token = ?
+					WHERE username = ?
+				`
+				conn.query(tokenUpdateSQL, [token, username], function(err,results,fields){
+					res.json({
+						token:token
+					})
+				})			
 		} else {
 			res.status(401).json({
 				message:"Invalid username and password"
 			})
 		}
-
 	})
 })
 
 app.post("/register", function(req,res,next){
 	const username = req.body.username
 	const password = req.body.password
+	const token = uuid()
 
 	const sql = `
-	INSERT INTO users (username, password)
-	VALUES (?, ?)
+	INSERT INTO users (username, password, token)
+	VALUES (?, ?,?)
 	`
 	bcrypt.hash(password, 10).then(function(hashedPassword){
-		conn.query(sql, [username, hashedPassword], function(err,results,fields){
+		conn.query(sql, [username, hashedPassword, token], function(err,results,fields){
 			res.json({
-				message: "Success!"
+				message: "Success!",
+				token:token
 			})
 		})
 	})
